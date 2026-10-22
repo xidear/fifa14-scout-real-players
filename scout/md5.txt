@@ -1,0 +1,2 @@
+3a8a4b70420f36e305009f2d02def18c  main_fifa.db
+20492d18892da29e99bce4e8be9b2797  newdb_fifa.db

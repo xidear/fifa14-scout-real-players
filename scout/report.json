@@ -1,0 +1,32 @@
+{
+  "records": 16282,
+  "existing_potential": 1826,
+  "appended_bytes": {
+    "main": 272674,
+    "new": 272674
+  },
+  "main_size": 4141714,
+  "new_size": 4742674,
+  "main_md5": "3a8a4b70420f36e305009f2d02def18c",
+  "new_md5": "20492d18892da29e99bce4e8be9b2797",
+  "boards": {
+    "Asia-Pacific": 1121,
+    "Africa": 961,
+    "Europe Other": 4640,
+    "Americas": 4168,
+    "Spain": 999,
+    "Netherlands": 395,
+    "Italy": 744,
+    "Germany": 687,
+    "France": 944,
+    "England": 1623
+  },
+  "candidate_sources": {
+    "fc24": 12417,
+    "fc26": 3010,
+    "tournament": 855
+  },
+  "chinese": 281,
+  "tournament": 3203,
+  "rating_missing": 676
+}

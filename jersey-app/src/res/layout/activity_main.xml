@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="20dp"
+    android:background="#121212">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="FIFA14 改号"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF" />
+
+    <TextView
+        android:id="@+id/status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:textSize="15sp"
+        android:lineSpacingExtra="4dp"
+        android:textColor="#B0BEC5" />
+
+    <Button
+        android:id="@+id/start"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:text="开启改号面板" />
+
+    <Button
+        android:id="@+id/remove"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:text="把“改”按钮从屏幕上移除" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:textSize="13sp"
+        android:lineSpacingExtra="4dp"
+        android:textColor="#9E9E9E"
+        android:text="用法：\n1. 先打开 FIFA14 并进入生涯模式\n2. 点上面的按钮，回到游戏\n3. 屏幕左侧出现小圆按钮「改」，点开面板\n4. 搜球员名 → 定位 → 点号码输入新号\n5. 改完点「收起」，比赛中不会遮挡画面\n\n通知栏里也可以随时显示/隐藏面板。" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:textSize="12sp"
+        android:textColor="#616161"
+        android:text="只修改运行中的生涯数据，不改 APK/OBB/存档文件。" />
+</LinearLayout>
