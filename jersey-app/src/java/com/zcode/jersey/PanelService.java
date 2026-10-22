@@ -41,6 +41,7 @@ import java.util.List;
 public class PanelService extends Service {
 
     public static final String ACTION_SHOW = "com.zcode.jersey.SHOW";
+    public static final String ACTION_START = "com.zcode.jersey.START";
     public static final String ACTION_TOGGLE = "com.zcode.jersey.TOGGLE";
     public static final String ACTION_REMOVE = "com.zcode.jersey.REMOVE";
     public static final String ACTION_STOP = "com.zcode.jersey.STOP";
@@ -83,6 +84,8 @@ public class PanelService extends Service {
             removeFab();
         } else if (ACTION_STOP.equals(a)) {
             stopSelf();
+        } else if (ACTION_START.equals(a)) {
+            if (fab == null) makeFab();
         } else if (ACTION_SHOW.equals(a) || ACTION_TOGGLE.equals(a)) {
             if (fab == null) makeFab();
             if (!open) showPanel(); else if (ACTION_TOGGLE.equals(a)) hidePanel();

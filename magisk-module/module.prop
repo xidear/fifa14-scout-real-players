@@ -1,0 +1,6 @@
+id=fifa14_jersey_auto
+name=FIFA14 改号自动悬浮
+version=1.0
+versionCode=1
+author=xidear
+description=启动 FIFA14 时自动显示改号悬浮按钮（需已安装「FIFA14 改号」App 并授权 root）
