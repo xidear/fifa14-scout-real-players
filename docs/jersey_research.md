@@ -358,3 +358,50 @@ python D:\FIFA14\work\jersey_cli.py find "Obiang"
 - 脚本 `D:\FIFA14\work\jersey_ui.js`；开机服务 `/data/adb/service.d/fifa_jersey_ui.sh`（等 FIFA 启动后自动注入，保持只有一个注入器）。
 - 配置 `.../files/jersey_ui.cfg` = `10 Manchester City`；日志 `.../files/jersey_ui.log`。
 - 列表点选 → 输入号码 → 写生涯库 → 刷新列表。
+
+---
+
+## 10. 存档方案落地（2026-10-19 ~ 10-22）
+
+内存扫描会让游戏 OOM（logcat OutOfMemoryError，FIFA 进程被杀），因此改走存档路线，最终完成外置 App。
+
+### 10.1 存档结构（已实测）
+
+- 文件：`/sdcard/Android/data/com.ea.game.fifa14_row/SAVECAREER.<日>.<月>.<年>.<时>.<分>.<秒>`，本档 3,423,800 字节。
+- roster 行 16 字节：`team u32 / pid u32 / flags u32 / alt u32`（小端）。
+- 球衣号：`jersey = ((flags & 0xFF) >> 1) + 1`；写回只改 flags 低字节。
+- 行起点不对齐 16：本档 `offset % 16 == 4`，必须按 0/4/8/12 四种对齐各扫一遍。
+- 连续 ≥5 行同一 team 视为一个球队块；本档 587 个块 / 586 队；曼城（team 10）在 0x5AF4，24 行。
+- 交换两号（Richards 11 ↔ Sturridge 2）整个文件只变 2 字节：0x5BEC、0x5BFC（flags 低字节）。
+
+### 10.2 游戏拒档的真正原因：文件属主
+
+写入后游戏提示「无游戏存档可用」。原因不是校验和，而是文件属主/权限：
+
+- 正确：`media_rw (1023) : u0_a20245 (30245)`，`660`。
+- 错误：`root:root 660`（root 的 cp/mv 默认结果）。
+- 必须 **先 chown/chmod 临时文件，再 mv 覆盖**；先 mv 再 chown 会留下错误属主的窗口。
+- 尾部 4 字节 `0xb17aefc5` 不是校验和：最小改动后不改它也能读档；crc32/adler/md5 均不匹配。
+
+### 10.3 App（com.zcode.jersey）
+
+- 前台服务 + `TYPE_APPLICATION_OVERLAY` 悬浮按钮；服务上下文**不能**用 AlertDialog（BadTokenException），所有弹窗都是 WindowManager 加的 overlay View。
+- 面板：球队选择（按名称筛选）、按号码排序的球员列表、逐人改号、冲突自动交换、刷新。
+- 号码输入弹窗置顶（y=56dp）+ 自动弹键盘，避免按钮被 IME 挡住。
+- 长按「改」按钮：移除按钮 / 恢复改号前备份 / 退出面板；通知栏也有显示-隐藏、退出。
+- 首次写入自动备份 `<存档>.bak_jersey`。
+- 读档/写档全部走 `su`；存档解析在 App 内用 ByteBuffer LE 完成。
+- 球员姓名索引：`assets/fifa.db`（856KB，32,564 人 / 631 队，小端 + 魔数 0x4A523034）。
+  - 坑：`DataInputStream.readInt()` 是大端，直接读这个索引会报 bad index magic，必须手写 LE 读取。
+- 坑：`am startservice` 以 shell 身份调用会被 `exported=false` 拒绝；root（`su -c am ...`）可以。
+
+### 10.4 与游戏本体的关系
+
+- 未改 APK：签名限制导致任何 APK 修改都要卸载重装，会丢 `Android/data`（存档）和 1.4GB OBB。
+- 未改 UI：FIFA14 界面是私有 Apt 编译脚本，无编译器、无扩展点。
+- 替代：Magisk 模块 `fifa14_jersey_auto`，启动 FIFA14 时自动以 root 拉起 `PanelService`（ACTION_START，只显示按钮不展开面板），实现「进游戏就有改号入口」。
+
+### 10.5 验证状态
+
+- 已验证：面板读取存档、列表按号码排序、改号写入、冲突交换、仅 2 字节 diff、属主/权限正确、按钮可移除/恢复、球队选择、自动备份。
+- 待用户验证：在游戏里点「继续职业生涯」，确认存档被接受且理查兹显示 #2（Sturridge #11）。
