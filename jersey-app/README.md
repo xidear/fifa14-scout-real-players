@@ -64,7 +64,7 @@ src/java/com/zcode/jersey/
   PlayerIndex.java     读取 assets/fifa.db（pid→姓名、球队→名单）
   RootUtil.java        su 封装
   RootBridge.java      PC 桥接回退（可选）
-src/assets/fifa.db     856 KB 索引：32,564 名球员、631 支球队
+src/assets/fifa.db     790 KB 索引：32,564 名球员、631 支球队（由 tools/build_player_index.py 从 cmn/fifa.db 重新生成）
 apk/jersey-app.apk     已签名可安装包
 ```
 
