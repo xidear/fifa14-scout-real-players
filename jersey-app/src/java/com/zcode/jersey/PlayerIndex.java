@@ -89,7 +89,19 @@ public final class PlayerIndex {
 
     public String name(int pid) {
         String s = pidName.get(pid);
-        return s == null ? ("pid " + pid) : s;
+        return s == null ? ("pid " + pid) : dedupe(s);
+    }
+
+    /** "Lucas Piazon Piazon" -> "Lucas Piazon"; keeps names that merely repeat a word apart. */
+    private static String dedupe(String s) {
+        String[] t = s.trim().split("\\s+");
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < t.length; i++) {
+            if (i > 0 && t[i].equalsIgnoreCase(t[i - 1])) continue;
+            if (b.length() > 0) b.append(' ');
+            b.append(t[i]);
+        }
+        return b.toString();
     }
 
     public boolean knows(int pid) { return pidName.containsKey(pid); }

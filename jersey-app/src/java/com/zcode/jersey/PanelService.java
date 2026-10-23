@@ -157,11 +157,85 @@ public class PanelService extends Service {
         fabLp = overlayLp();
         fabLp.width = dp(46);
         fabLp.height = dp(46);
-        fabLp.x = dp(6);
-        fabLp.y = dp(300);
+        fabLp.x = prefs().getInt("fab_x", dp(6));
+        fabLp.y = prefs().getInt("fab_y", dp(300));
         fab.setOnClickListener(v -> { if (open) hidePanel(); else showPanel(); });
-        fab.setOnLongClickListener(v -> { fabMenu(); return true; });
+        fab.setOnTouchListener(new View.OnTouchListener() {
+            float downX, downY;
+            int startX, startY, locX, locY, viewW, viewH, screenW, screenH;
+            boolean dragging;
+            final boolean[] longFired = new boolean[1];
+            final Runnable longPress = () -> { longFired[0] = true; fabMenu(); };
+
+            @Override public boolean onTouch(View v, android.view.MotionEvent e) {
+                switch (e.getActionMasked()) {
+                    case android.view.MotionEvent.ACTION_DOWN:
+                        downX = e.getRawX();
+                        downY = e.getRawY();
+                        startX = fabLp.x;
+                        startY = fabLp.y;
+                        int[] loc = new int[2];
+                        fab.getLocationOnScreen(loc);
+                        locX = loc[0];
+                        locY = loc[1];
+                        viewW = fab.getWidth();
+                        viewH = fab.getHeight();
+                        android.graphics.Point sz = new android.graphics.Point();
+                        wm.getDefaultDisplay().getSize(sz);   // size in current rotation
+                        screenW = sz.x;
+                        screenH = sz.y;
+                        dragging = false;
+                        longFired[0] = false;
+                        ui.postDelayed(longPress, 650);
+                        return true;
+                    case android.view.MotionEvent.ACTION_MOVE:
+                        float dx = e.getRawX() - downX;
+                        float dy = e.getRawY() - downY;
+                        if (!dragging && (Math.abs(dx) > dp(4) || Math.abs(dy) > dp(4))) {
+                            dragging = true;
+                            ui.removeCallbacks(longPress);
+                        }
+                        if (dragging) {
+                            // Clamp in real screen coordinates, then convert back to window coords.
+                            int vx = Math.max(0, Math.min(screenW - viewW, locX + (int) dx));
+                            int vy = Math.max(0, Math.min(screenH - viewH, locY + (int) dy));
+                            fabLp.x = startX + (vx - locX);
+                            fabLp.y = startY + (vy - locY);
+                            try { wm.updateViewLayout(fab, fabLp); } catch (Exception ignored) {}
+                        }
+                        return true;
+                    case android.view.MotionEvent.ACTION_UP:
+                        ui.removeCallbacks(longPress);
+                        if (dragging) {
+                            prefs().edit().putInt("fab_x", fabLp.x)
+                                    .putInt("fab_y", fabLp.y).apply();
+                        } else if (!longFired[0]) {
+                            v.performClick();
+                        }
+                        return true;
+                }
+                return false;
+            }
+        });
         try { wm.addView(fab, fabLp); } catch (Exception e) { toast("浮窗被拒绝: " + e); }
+        // Keep the button on screen when the saved position was taken in another rotation.
+        fab.post(() -> {
+            try {
+                int[] loc = new int[2];
+                fab.getLocationOnScreen(loc);
+                android.graphics.Point sz = new android.graphics.Point();
+                wm.getDefaultDisplay().getSize(sz);
+                int vx = Math.max(0, Math.min(sz.x - fab.getWidth(), loc[0]));
+                int vy = Math.max(0, Math.min(sz.y - fab.getHeight(), loc[1]));
+                if (vx != loc[0] || vy != loc[1]) {
+                    fabLp.x += vx - loc[0];
+                    fabLp.y += vy - loc[1];
+                    wm.updateViewLayout(fab, fabLp);
+                    prefs().edit().putInt("fab_x", fabLp.x)
+                            .putInt("fab_y", fabLp.y).apply();
+                }
+            } catch (Exception ignored) {}
+        });
     }
 
     private void fabMenu() {
