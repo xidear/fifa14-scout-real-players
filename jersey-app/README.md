@@ -51,7 +51,7 @@ python tools/install_app.py --adb adb
 jersey = ((flags & 0xFF) >> 1) + 1
 ```
 
-改一个号码只改 1 个字节。写入时必须保持文件属主 `media_rw:u0_aXXXXX` 和权限 `660`，否则游戏会提示「无游戏存档可用」。细节见 [`../docs/save_format.md`](../docs/save_format.md)。
+改一个号码只改 1 个字节。写回时 App 会继承原文件的属主（`media_rw:u0_aXXXXX` / `660`），并**重算整档尾部 CRC**——最后 4 字节是 `[0, len-4)` 的 CRC-32（poly `0x04C11DB7`、非反射、init/xorout `0xFFFFFFFF`）。不重算会让游戏提示「无游戏存档可用」。细节见 [`../docs/save_format.md`](../docs/save_format.md)。
 
 ## 源码结构
 

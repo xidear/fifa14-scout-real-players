@@ -65,6 +65,7 @@ public class PanelService extends Service {
     private SaveBackend.Block teamBlock;
     private byte[] saveData;
     private String savePath;
+    private boolean saveChecksumOk;
 
     public static boolean isRunning() { return running; }
 
@@ -286,9 +287,11 @@ public class PanelService extends Service {
             }
             List<SaveBackend.Block> bs = SaveBackend.parse(data);
             SaveBackend.Block tb = SaveBackend.teamBlock(bs, team);
+            boolean okSum = SaveBackend.checksumOk(data);
             ui.post(() -> {
                 savePath = path;
                 saveData = data;
+                saveChecksumOk = okSum;
                 blocks = bs;
                 teamBlock = tb;
                 render();
@@ -388,7 +391,8 @@ public class PanelService extends Service {
         rows.sort(Comparator.comparingInt(SaveBackend.Row::jersey));
         if (statusView != null) {
             statusView.setText("队 " + teamBlock.team + " · " + rows.size() + " 人 · "
-                    + (savePath == null ? "" : new java.io.File(savePath).getName()));
+                    + (savePath == null ? "" : new java.io.File(savePath).getName())
+                    + (saveChecksumOk ? " · 校验✓" : " · 校验✗(写入时修复)"));
         }
         for (SaveBackend.Row r : rows) {
             LinearLayout row = new LinearLayout(this);

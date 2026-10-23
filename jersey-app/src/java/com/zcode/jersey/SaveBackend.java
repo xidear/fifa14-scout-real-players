@@ -67,6 +67,7 @@ final class SaveBackend {
     }
 
     static boolean write(Context ctx, String path, byte[] data) {
+        fixChecksum(data);
         File f = new File(ctx.getCacheDir(), "save_write.bin");
         try (FileOutputStream out = new FileOutputStream(f)) {
             out.write(data);
@@ -101,6 +102,40 @@ final class SaveBackend {
                 + " && chown " + og[0] + ":" + og[1] + " '" + path + "'"
                 + " && chmod 660 '" + path + "' && echo OK";
         return RootUtil.shRead(cmd, 2).trim().equals("OK");
+    }
+
+    /**
+     * The last 4 bytes of SAVECAREER are a CRC-32 over every byte before them:
+     * polynomial 0x04C11DB7, non-reflected, init 0xFFFFFFFF, final xor 0xFFFFFFFF.
+     * The game refuses the save when it does not match.
+     */
+    static int checksum(byte[] d, int len) {
+        int c = 0xFFFFFFFF;
+        for (int i = 0; i < len; i++) {
+            c ^= (d[i] & 0xFF) << 24;
+            for (int k = 0; k < 8; k++) {
+                c = (c & 0x80000000) != 0 ? (c << 1) ^ 0x04C11DB7 : c << 1;
+            }
+        }
+        return c ^ 0xFFFFFFFF;
+    }
+
+    static void fixChecksum(byte[] d) {
+        if (d.length < 8) return;
+        int n = d.length - 4;
+        int c = checksum(d, n);
+        d[n] = (byte) c;
+        d[n + 1] = (byte) (c >>> 8);
+        d[n + 2] = (byte) (c >>> 16);
+        d[n + 3] = (byte) (c >>> 24);
+    }
+
+    static boolean checksumOk(byte[] d) {
+        if (d.length < 8) return false;
+        int n = d.length - 4;
+        int stored = (d[n] & 0xFF) | ((d[n + 1] & 0xFF) << 8)
+                | ((d[n + 2] & 0xFF) << 16) | ((d[n + 3] & 0xFF) << 24);
+        return stored == checksum(d, n);
     }
 
     static List<Block> parse(byte[] d) {
