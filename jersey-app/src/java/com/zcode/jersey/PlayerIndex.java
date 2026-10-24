@@ -118,6 +118,26 @@ public final class PlayerIndex {
         return null;
     }
 
+    /**
+     * Fuzzy team search that ignores word order and short prefixes, so "ac milan",
+     * "milan ac" and "milan" all find "AC Milan".  Every query token must match the
+     * start of one of the team's words (or the whole word sequence).
+     */
+    static boolean teamMatches(String teamName, String[] tokens) {
+        if (tokens == null || tokens.length == 0) return true;
+        String name = teamName.toLowerCase();
+        for (String tok : tokens) {
+            if (tok.isEmpty()) continue;
+            if (name.contains(tok)) continue;
+            boolean hit = false;
+            for (String w : name.split("[^a-z0-9]+")) {
+                if (!w.isEmpty() && (w.startsWith(tok) || tok.startsWith(w))) { hit = true; break; }
+            }
+            if (!hit) return false;
+        }
+        return true;
+    }
+
     /** Looks a team up by (partial) name; exact match wins, then prefix, then contains. */
     public Team team(String query) {
         if (query == null) return null;

@@ -13,12 +13,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Reads and writes the career save (SAVECAREER.*) through root.
+ * Reads and writes SAVECAREER.* through root.
  *
- * The save contains a flat roster table: 16-byte rows (teamid, playerid, flags, alt),
- * jersey = ((flags & 0xFF) >> 1) + 1. Rows are grouped per team; the table starts at a
- * 4-byte aligned offset (offset % 16 == 4 on this build), so discovery scans every
- * alignment and keeps runs of >= 5 rows that share a team id.
+ * Roster rows are 16 bytes (team, player, flags, alt); jersey = ((flags & 0xFF) >> 1) + 1.
+ * The last 4 bytes hold a CRC-32 over the rest of the file; the game rejects a save whose
+ * checksum does not match, so every write recomputes it and then reads the file back to
+ * confirm the bytes really landed.
  */
 final class SaveBackend {
 
@@ -43,12 +43,13 @@ final class SaveBackend {
     private SaveBackend() {}
 
     static String newestPath() {
-        String out = RootUtil.shRead("ls -t " + DIR + "SAVECAREER* 2>/dev/null | head -1", 3).trim();
+        String out = RootUtil.shRead("ls -t " + DIR + "SAVECAREER* 2>/dev/null | grep -v '\\.bak' | grep -v '\\.app_' | head -1", 3).trim();
         return out.isEmpty() ? null : out;
     }
 
     static byte[] read(Context ctx, String path) {
         File cache = new File(ctx.getCacheDir(), "save_read.bin");
+        if (cache.exists()) cache.delete();
         String cmd = "cp '" + path + "' '" + cache.getAbsolutePath() + "' && chmod 644 '"
                 + cache.getAbsolutePath() + "'";
         RootUtil.shRead(cmd, 2);
@@ -66,48 +67,80 @@ final class SaveBackend {
         }
     }
 
-    static boolean write(Context ctx, String path, byte[] data) {
+    /** Result of a write attempt; {@link #ok} is only true after a verified read-back. */
+    static final class WriteResult {
+        boolean ok;
+        String error = "";
+        static WriteResult fail(String why) {
+            WriteResult r = new WriteResult();
+            r.error = why;
+            return r;
+        }
+    }
+
+    static WriteResult write(Context ctx, String path, byte[] data) {
         fixChecksum(data);
         File f = new File(ctx.getCacheDir(), "save_write.bin");
         try (FileOutputStream out = new FileOutputStream(f)) {
             out.write(data);
         } catch (Exception e) {
-            return false;
+            return WriteResult.fail("写临时文件失败: " + e.getMessage());
         }
-        String own = RootUtil.shRead("stat -c '%u %g' '" + path + "'", 2).trim();
+        String own = RootUtil.shRead("stat -c '%u %g %a' '" + path + "'", 2).trim();
         String[] og = own.split("\\s+");
-        if (og.length != 2) return false;
+        if (og.length != 3) return WriteResult.fail("读不到原存档属主（root 失败？）");
+
         String tmp = path + ".app_tmp";
         String bak = path + ".bak_jersey";
-        // Keep one untouched copy of the save from before the first edit.
         String cmd = "cp '" + f.getAbsolutePath() + "' '" + tmp + "'"
                 + " && chown " + og[0] + ":" + og[1] + " '" + tmp + "'"
-                + " && chmod 660 '" + tmp + "'"
+                + " && chmod " + og[2] + " '" + tmp + "'"
                 + " && { [ -f '" + bak + "' ] || { cp '" + path + "' '" + bak + "'"
                 + " && chown " + og[0] + ":" + og[1] + " '" + bak + "'"
-                + " && chmod 660 '" + bak + "'; } }"
-                + " && mv -f '" + tmp + "' '" + path + "'";
-        RootUtil.shRead(cmd, 3);
-        String check = RootUtil.shRead("stat -c '%u %g %a' '" + path + "'", 2).trim();
-        return check.equals(og[0] + " " + og[1] + " 660");
+                + " && chmod " + og[2] + " '" + bak + "'; } }"
+                + " && mv -f '" + tmp + "' '" + path + "'"
+                + " && echo APPLIED";
+        String out = RootUtil.shRead(cmd, 5).trim();
+        if (!out.contains("APPLIED")) return WriteResult.fail("root 命令未成功: " + out);
+
+        // Verify: read the file back and compare every byte with what we meant to write.
+        byte[] back = read(ctx, path);
+        if (back == null) return WriteResult.fail("写入后回读失败");
+        if (back.length != data.length) {
+            return WriteResult.fail("回读长度不符 " + back.length + " != " + data.length);
+        }
+        int firstDiff = -1;
+        for (int i = 0; i < back.length; i++) {
+            if (back[i] != data[i]) { firstDiff = i; break; }
+        }
+        if (firstDiff >= 0) {
+            return WriteResult.fail("回读内容不符，首个差异 @" + Integer.toHexString(firstDiff));
+        }
+        WriteResult r = new WriteResult();
+        r.ok = true;
+        return r;
     }
 
     /** Restores the untouched copy saved by write(); false when there is none. */
     static boolean restoreBackup(String path) {
         String bak = path + ".bak_jersey";
-        String own = RootUtil.shRead("stat -c '%u %g' '" + path + "'", 2).trim();
+        String own = RootUtil.shRead("stat -c '%u %g %a' '" + path + "'", 2).trim();
         String[] og = own.split("\\s+");
-        if (og.length != 2) return false;
+        if (og.length != 3) return false;
         String cmd = "[ -f '" + bak + "' ] && cp '" + bak + "' '" + path + "'"
                 + " && chown " + og[0] + ":" + og[1] + " '" + path + "'"
-                + " && chmod 660 '" + path + "' && echo OK";
+                + " && chmod " + og[2] + " '" + path + "' && echo OK";
         return RootUtil.shRead(cmd, 2).trim().equals("OK");
+    }
+
+    static boolean hasBackup(String path) {
+        String cmd = "[ -f '" + path + ".bak_jersey' ] && echo Y";
+        return RootUtil.shRead(cmd, 1).trim().equals("Y");
     }
 
     /**
      * The last 4 bytes of SAVECAREER are a CRC-32 over every byte before them:
      * polynomial 0x04C11DB7, non-reflected, init 0xFFFFFFFF, final xor 0xFFFFFFFF.
-     * The game refuses the save when it does not match.
      */
     static int checksum(byte[] d, int len) {
         int c = 0xFFFFFFFF;

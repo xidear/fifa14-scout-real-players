@@ -67,6 +67,8 @@ public class PanelService extends Service {
     private String savePath;
     private boolean saveChecksumOk;
 
+    private static final int FAB_DP = 46;
+
     public static boolean isRunning() { return running; }
 
     @Override public IBinder onBind(Intent i) { return null; }
@@ -151,14 +153,18 @@ public class PanelService extends Service {
         fab.setTextColor(Color.WHITE);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(0xB31A1A1A);
-        bg.setCornerRadius(dp(24));
+        bg.setCornerRadius(dp(FAB_DP / 2f));
         bg.setStroke(dp(2), 0xFF4CAF50);
         fab.setBackground(bg);
         fabLp = overlayLp();
-        fabLp.width = dp(46);
-        fabLp.height = dp(46);
+        fabLp.width = dp(FAB_DP);
+        fabLp.height = dp(FAB_DP);
+        fab.setPadding(0, 0, 0, 0);
+        fab.setGravity(Gravity.CENTER);
         fabLp.x = prefs().getInt("fab_x", dp(6));
         fabLp.y = prefs().getInt("fab_y", dp(300));
+        // Touch only counts inside the drawn circle: the Button's measured box is wider than
+        // the round background, and touches outside it must fall through to the game.
         fab.setOnClickListener(v -> { if (open) hidePanel(); else showPanel(); });
         fab.setOnTouchListener(new View.OnTouchListener() {
             float downX, downY;
@@ -170,6 +176,10 @@ public class PanelService extends Service {
             @Override public boolean onTouch(View v, android.view.MotionEvent e) {
                 switch (e.getActionMasked()) {
                     case android.view.MotionEvent.ACTION_DOWN:
+                        float cx = v.getWidth() / 2f;
+                        float cy = v.getHeight() / 2f;
+                        float rad = Math.min(cx, cy) + dp(2);
+                        if (Math.hypot(e.getX() - cx, e.getY() - cy) > rad) return false;
                         downX = e.getRawX();
                         downY = e.getRawY();
                         startX = fabLp.x;
@@ -252,6 +262,7 @@ public class PanelService extends Service {
             new Thread(() -> {
                 String p = SaveBackend.newestPath();
                 boolean ok = p != null && SaveBackend.restoreBackup(p);
+                Log.write(this, "restore backup " + p + " ok=" + ok);
                 ui.post(() -> {
                     toast(ok ? "已恢复备份；重新读档后生效" : "没有找到备份");
                     if (ok) loadSave();
@@ -350,7 +361,7 @@ public class PanelService extends Service {
 
     private void loadSave() {
         if (statusView != null) statusView.setText("读取存档…");
-        final int team = prefs().getInt(KEY_TEAM, 10);
+        final int team = prefs().getInt(KEY_TEAM, -1);
         new Thread(() -> {
             String path = SaveBackend.newestPath();
             if (path == null) { ui.post(() -> statusView.setText("找不到 SAVECAREER 存档")); return; }
@@ -360,7 +371,12 @@ public class PanelService extends Service {
                 return;
             }
             List<SaveBackend.Block> bs = SaveBackend.parse(data);
-            SaveBackend.Block tb = SaveBackend.teamBlock(bs, team);
+            int useTeam = team;
+            if (useTeam <= 0) {
+                useTeam = detectCareerTeam(bs);
+                if (useTeam > 0) prefs().edit().putInt(KEY_TEAM, useTeam).apply();
+            }
+            SaveBackend.Block tb = SaveBackend.teamBlock(bs, useTeam);
             boolean okSum = SaveBackend.checksumOk(data);
             ui.post(() -> {
                 savePath = path;
@@ -371,6 +387,20 @@ public class PanelService extends Service {
                 render();
             });
         }).start();
+    }
+
+    /**
+     * The career roster is the biggest block in the save (the club the user manages plus
+     * CPU squads). No team is hardcoded: the largest block wins, and the user can still
+     * change it from the team picker.
+     */
+    private static int detectCareerTeam(List<SaveBackend.Block> blocks) {
+        SaveBackend.Block best = null;
+        for (SaveBackend.Block b : blocks) {
+            if (best == null || b.rows > best.rows
+                    || (b.rows == best.rows && b.team < best.team)) best = b;
+        }
+        return best == null ? -1 : best.team;
     }
 
     private void pickTeam() {
@@ -410,9 +440,10 @@ public class PanelService extends Service {
         Runnable fill = () -> {
             list.removeAllViews();
             String q = filter.getText().toString().trim().toLowerCase();
+            String[] tokens = q.isEmpty() ? new String[0] : q.split("[ ]+");
             int shown = 0;
             for (PlayerIndex.Team t : all) {
-                if (!q.isEmpty() && !t.name.toLowerCase().contains(q)) continue;
+                if (!PlayerIndex.teamMatches(t.name, tokens)) continue;
                 Button b = btn(t.name + "  #" + t.id, v -> {
                     prefs().edit().putInt(KEY_TEAM, t.id).apply();
                     closeModal();
@@ -457,7 +488,7 @@ public class PanelService extends Service {
         if (teamBlock == null) {
             if (statusView != null) {
                 statusView.setText("存档里有 " + blocks.size()
-                        + " 段名单，但没有球队 " + prefs().getInt(KEY_TEAM, 10) + "；点“球队”选择");
+                        + " 段名单，但没有球队 " + prefs().getInt(KEY_TEAM, -1) + "；点“球队”选择");
             }
             return;
         }
@@ -533,19 +564,32 @@ public class PanelService extends Service {
         for (SaveBackend.Row r : teamBlock.list) if (r.jersey() == want) found = r;
         final SaveBackend.Row owner = found;
         final int old = row.jersey();
-        SaveBackend.setJersey(saveData, row.offset, want);
-        if (owner != null) SaveBackend.setJersey(saveData, owner.offset, old);
+        PlayerIndex ix = PlayerIndex.get(this);
+        final String ownerName = owner == null ? "" : (ix == null ? ("pid " + owner.pid) : ix.name(owner.pid));
+        final String playerName = ix == null ? ("pid " + row.pid) : ix.name(row.pid);
+
+        // Work on a copy: if the write fails the on-screen data must not pretend it succeeded.
+        final byte[] data = saveData.clone();
+        SaveBackend.setJersey(data, row.offset, want);
+        if (owner != null) SaveBackend.setJersey(data, owner.offset, old);
+        if (statusView != null) statusView.setText("正在写入存档…");
+
         new Thread(() -> {
-            boolean ok = SaveBackend.write(this, savePath, saveData);
-            PlayerIndex ix = PlayerIndex.get(this);
-            String ownerName = owner == null ? "" : (ix == null ? ("pid " + owner.pid) : ix.name(owner.pid));
+            SaveBackend.WriteResult wr = SaveBackend.write(this, savePath, data);
+            Log.write(this, "apply " + playerName + " #" + old + " -> #" + want
+                    + (owner != null ? " (swap with " + ownerName + ")" : "")
+                    + " ok=" + wr.ok + (wr.ok ? "" : " err=" + wr.error));
             ui.post(() -> {
-                String msg = ok
-                        ? (owner != null
-                           ? ("已与 " + ownerName + " 交换 " + old + "↔" + want)
-                           : ("#" + want + " 已写入存档"))
-                        : "写入失败（需要 root）";
-                toast(msg + (ok ? "；重新读档后生效" : ""));
+                if (!wr.ok) {
+                    toast("写入失败：" + wr.error);
+                    if (statusView != null) statusView.setText("写入失败：" + wr.error);
+                    loadSave();           // reload the real file so the list shows the truth
+                    return;
+                }
+                String msg = owner != null
+                        ? ("已与 " + ownerName + " 交换 " + old + "↔" + want)
+                        : ("#" + want + " 已写入存档");
+                toast(msg + "（已校验写入）");
                 loadSave();
             });
         }).start();

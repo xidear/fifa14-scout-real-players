@@ -10,6 +10,13 @@ final class Log {
 
     private Log() {}
 
+    static void write(Context ctx, String msg) {
+        try (java.io.FileWriter w = new java.io.FileWriter(PATH, true)) {
+            w.write("[" + System.currentTimeMillis() + "] " + msg + String.valueOf((char) 10));
+        } catch (Exception ignored) {}
+        android.util.Log.i("JerseyApp", msg);
+    }
+
     static void indexError(Context ctx, Exception e) {
         String msg = "INDEX LOAD FAILED: " + e.getClass().getSimpleName() + ": " + e.getMessage();
         try (java.io.FileWriter w = new java.io.FileWriter(PATH, true)) {
