@@ -28,8 +28,8 @@
 md5：
 
 ```
-3a8a4b70420f36e305009f2d02def18c  main_fifa.db   (4,141,714 B)
-20492d18892da29e99bce4e8be9b2797  newdb_fifa.db  (4,742,674 B)
+a74a7e8acfd93b71068a96d094d8c32f  main_fifa.db   (4,141,714 B)
+ca6bf1280bd559c6613e581c53269903  newdb_fifa.db  (4,742,674 B)
 ```
 
 ### 一键推送（推荐）

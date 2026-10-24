@@ -20,8 +20,8 @@ MAIN = os.path.join(ROOT, "scout", "main_fifa.db")
 NEW = os.path.join(ROOT, "scout", "newdb_fifa.db")
 
 EXPECTED = {
-    MAIN: "3a8a4b70420f36e305009f2d02def18c",
-    NEW: "20492d18892da29e99bce4e8be9b2797",
+    MAIN: "a74a7e8acfd93b71068a96d094d8c32f",
+    NEW: "ca6bf1280bd559c6613e581c53269903",
 }
 
 

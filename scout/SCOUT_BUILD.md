@@ -41,8 +41,10 @@
 
 ## 位置
 
-- 根因：整块复制 donor 的 `20:72` 会把 donor 的 pref1/pref2 一起复制（哈兰德 CAM、维尼修斯 RB、拉菲尼亚 CDM）。
-- 修正：复制后显式写 pref1/pref2（主库 bit179/189，New DB bit211/221）。
+- 根因：整块复制 donor 的 `20:72` 会把 donor 的位置一起复制；而游戏**真正显示的位置字段不是** bit179/189，而是 4 位字段：主库 **bit175**、New DB **bit207**（高位在前）。
+- 修正：donor 只从同位置组里选（GK/GK；CB/CB；LB/RB/LWB/RWB；CM/CDM/CAM；LM/RM/LW/RW；ST/CF），并在复制后把目标位置写进 **bit175/207**。
+- 码表（2026-01-25 用游戏内球员简历逐个核对）：GK0 RB1 CB2 LB3 CDM5 RM7 CM8 LM9 LW10 CAM11 RW13 ST15；LWB→LB、RWB→RB、CF→ST。
+- 校验：16,282 人主库与 New DB 的位置字段与目标位置 **0 误差**；游戏内 Raya 已显示 GK。
 - 主位置 = FC26 `position`；副位置 = FC26 `alternatePositions` 第一个；Rodri 特例 CDM/CB。
 - 位置码：`GK0 SW1 CM14 CAM3 RM30 LM7 RB6 LB15 CB10 CDM22 CF23 ST28 RW29 LW8 LWB16 RWB6`。
 
@@ -95,8 +97,8 @@
 
 ## 文件与 md5
 
-- `out/main_fifa.db` → 平板 `data/cmn/fifa.db`，md5 `3a8a4b70420f36e305009f2d02def18c`（4,141,714B）
-- `out/newdb_fifa.db` → 平板 `data/cmn/New DB/fifa.db`，md5 `20492d18892da29e99bce4e8be9b2797`（4,742,674B）
+- `out/main_fifa.db` → 平板 `data/cmn/fifa.db`，md5 `a74a7e8acfd93b71068a96d094d8c32f`（4,141,714B）
+- `out/newdb_fifa.db` → 平板 `data/cmn/New DB/fifa.db`，md5 `ca6bf1280bd559c6613e581c53269903`（4,742,674B）
 - 增强 OBB → 平板 `Android/obb/com.ea.game.fifa14_row/main.136...obb`，md5 `cc3ba879d7f859439f4f7a1fe5dfe194`（原版 `4207c3ce8b1ca6b7793d7e5de432207f`）
 - `data/ballon_verification.csv`：140 名金球奖球员逐人核对
 - `out/assignment.csv`、`out/report.json`、`out/validation.json`、`out/scout_guide.md/csv`

@@ -6,8 +6,8 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FILES = {
-    os.path.join(ROOT, "scout", "main_fifa.db"): "3a8a4b70420f36e305009f2d02def18c",
-    os.path.join(ROOT, "scout", "newdb_fifa.db"): "20492d18892da29e99bce4e8be9b2797",
+    os.path.join(ROOT, "scout", "main_fifa.db"): "a74a7e8acfd93b71068a96d094d8c32f",
+    os.path.join(ROOT, "scout", "newdb_fifa.db"): "ca6bf1280bd559c6613e581c53269903",
 }
 
 
