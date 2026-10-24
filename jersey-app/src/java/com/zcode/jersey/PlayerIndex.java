@@ -123,6 +123,17 @@ public final class PlayerIndex {
      * "milan ac" and "milan" all find "AC Milan".  Every query token must match the
      * start of one of the team's words (or the whole word sequence).
      */
+    /** Every query token must appear in the name (order-independent, case-insensitive). */
+    static boolean nameMatches(String name, String[] tokens) {
+        if (tokens == null || tokens.length == 0) return true;
+        String low = name.toLowerCase();
+        for (String t : tokens) {
+            if (t == null || t.isEmpty()) continue;
+            if (!low.contains(t)) return false;
+        }
+        return true;
+    }
+
     static boolean teamMatches(String teamName, String[] tokens) {
         if (tokens == null || tokens.length == 0) return true;
         String name = teamName.toLowerCase();

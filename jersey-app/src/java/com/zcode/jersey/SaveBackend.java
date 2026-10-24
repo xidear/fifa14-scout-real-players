@@ -214,6 +214,20 @@ final class SaveBackend {
         return out;
     }
 
+    /** The managed club id is stored at offset 8 of the save header. */
+    static int headerTeam(byte[] d) {
+        if (d.length < 12) return -1;
+        int t = (d[8] & 0xFF) | ((d[9] & 0xFF) << 8) | ((d[10] & 0xFF) << 16) | ((d[11] & 0xFF) << 24);
+        return (t > 0 && t < 10_000_000) ? t : -1;
+    }
+
+    static Block blockContaining(List<Block> blocks, int offset) {
+        for (Block b : blocks) {
+            if (offset >= b.offset && offset < b.offset + b.rows * ROW) return b;
+        }
+        return null;
+    }
+
     static Block teamBlock(List<Block> blocks, int team) {
         Block best = null;
         for (Block b : blocks) {

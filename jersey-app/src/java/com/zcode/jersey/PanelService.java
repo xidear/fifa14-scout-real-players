@@ -66,6 +66,8 @@ public class PanelService extends Service {
     private byte[] saveData;
     private String savePath;
     private boolean saveChecksumOk;
+    private EditText searchBox;
+    private String query = "";
 
     private static final int FAB_DP = 46;
 
@@ -340,6 +342,24 @@ public class PanelService extends Service {
         statusView.setPadding(dp(4), dp(2), dp(4), dp(4));
         root.addView(statusView);
 
+        searchBox = new EditText(this);
+        searchBox.setHint("搜索球员（模糊，如 raya）");
+        searchBox.setSingleLine(true);
+        searchBox.setTextSize(12);
+        searchBox.setTextColor(Color.WHITE);
+        searchBox.setHintTextColor(0xFF9E9E9E);
+        searchBox.setText(query);
+        searchBox.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence c, int a, int b, int d) {}
+            public void onTextChanged(CharSequence c, int a, int b, int d) {}
+            public void afterTextChanged(android.text.Editable e) {
+                query = e.toString();
+                render();
+            }
+        });
+        root.addView(searchBox, new LinearLayout.LayoutParams(dp(320),
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
         ScrollView sc = new ScrollView(this);
         listView = new LinearLayout(this);
         listView.setOrientation(LinearLayout.VERTICAL);
@@ -371,11 +391,14 @@ public class PanelService extends Service {
                 return;
             }
             List<SaveBackend.Block> bs = SaveBackend.parse(data);
+            int header = SaveBackend.headerTeam(data);
             int useTeam = team;
-            if (useTeam <= 0) {
+            if (header > 0 && SaveBackend.teamBlock(bs, header) != null) {
+                useTeam = header;                       // the club this career manages
+            } else if (useTeam <= 0) {
                 useTeam = detectCareerTeam(bs);
-                if (useTeam > 0) prefs().edit().putInt(KEY_TEAM, useTeam).apply();
             }
+            if (useTeam > 0) prefs().edit().putInt(KEY_TEAM, useTeam).apply();
             SaveBackend.Block tb = SaveBackend.teamBlock(bs, useTeam);
             boolean okSum = SaveBackend.checksumOk(data);
             ui.post(() -> {
@@ -485,6 +508,8 @@ public class PanelService extends Service {
             if (statusView != null) statusView.setText("球员索引加载失败：assets/fifa.db 读取异常");
             return;
         }
+        String q = query == null ? "" : query.trim();
+        if (!q.isEmpty()) { renderSearch(ix, q); return; }
         if (teamBlock == null) {
             if (statusView != null) {
                 statusView.setText("存档里有 " + blocks.size()
@@ -513,6 +538,38 @@ public class PanelService extends Service {
             row.addView(tv, lp);
             row.addView(btn("改", v -> askNumber(r)));
             listView.addView(row);
+        }
+    }
+
+    /** Fuzzy search across every roster block; results show the club name. */
+    private void renderSearch(PlayerIndex ix, String q) {
+        String[] tokens = q.toLowerCase().split("[ ]+");
+        int shown = 0;
+        for (SaveBackend.Block b : blocks) {
+            PlayerIndex.Team team = ix.team(b.team);
+            String teamName = team == null ? ("team " + b.team) : team.name;
+            for (SaveBackend.Row r : b.list) {
+                String nm = ix.name(r.pid);
+                if (!PlayerIndex.nameMatches(nm, tokens)) continue;
+                LinearLayout row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                TextView tv = new TextView(this);
+                tv.setText(String.format("#%-3d %s · %s", r.jersey(), nm, teamName));
+                tv.setTextColor(Color.WHITE);
+                tv.setTextSize(12);
+                tv.setPadding(dp(4), dp(9), dp(4), dp(9));
+                row.addView(tv, new LinearLayout.LayoutParams(0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+                row.addView(btn("改", v -> askNumber(r)));
+                listView.addView(row);
+                if (++shown >= 300) break;
+            }
+            if (shown >= 300) break;
+        }
+        if (statusView != null) {
+            statusView.setText(shown == 0 ? ("没有匹配 “" + q + "” 的球员")
+                    : ("搜索 “" + q + "”：" + shown + " 人（全存档）"));
         }
     }
 
@@ -560,8 +617,10 @@ public class PanelService extends Service {
 
     private void apply(SaveBackend.Row row, int want) {
         if (row.jersey() == want) return;
+        SaveBackend.Block block = SaveBackend.blockContaining(blocks, row.offset);
+        if (block == null) block = teamBlock;
         SaveBackend.Row found = null;
-        for (SaveBackend.Row r : teamBlock.list) if (r.jersey() == want) found = r;
+        if (block != null) for (SaveBackend.Row r : block.list) if (r.jersey() == want) found = r;
         final SaveBackend.Row owner = found;
         final int old = row.jersey();
         PlayerIndex ix = PlayerIndex.get(this);
