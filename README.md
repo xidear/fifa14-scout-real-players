@@ -88,7 +88,7 @@ scout/        球员池数据库、完整名单、球探清单、核对表、构
 jersey-app/   改号 App 源码、构建脚本、已签名 APK
 magisk-module/ Magisk 模块：启动 FIFA14 时自动显示改号按钮
 tools/        push_db（推送数据库）、verify_md5、patch_career_cpu（可选）
-docs/         存档格式说明、球衣号码逆向研究、球探池构建经验
+docs/         存档格式说明、球衣号码逆向研究、球探池构建经验、**全流程经验总结（FIFA14_全流程经验_20260125.md）**
 ```
 
 ## 四、免责声明
