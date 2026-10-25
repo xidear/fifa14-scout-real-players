@@ -68,8 +68,11 @@ public class PanelService extends Service {
     private boolean saveChecksumOk;
     private EditText searchBox;
     private String query = "";
+    private int pending;              // jersey changes written since the last game restart
+    private Button doneBtn;
 
     private static final int FAB_DP = 46;
+    private static final String NL = String.valueOf((char) 10);
 
     public static boolean isRunning() { return running; }
 
@@ -77,6 +80,8 @@ public class PanelService extends Service {
 
     @Override public void onCreate() {
         super.onCreate();
+        Log.init(this);
+        Log.i("PanelService.onCreate");
         running = true;
         startForegroundCompat();
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
@@ -85,6 +90,7 @@ public class PanelService extends Service {
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         String a = intent == null ? null : intent.getAction();
+        Log.i("PanelService.onStartCommand action=" + a);
         if (ACTION_REMOVE.equals(a)) {
             removeFab();
         } else if (ACTION_STOP.equals(a)) {
@@ -99,6 +105,7 @@ public class PanelService extends Service {
     }
 
     @Override public void onDestroy() {
+        Log.i("PanelService.onDestroy");
         running = false;
         try { if (panelRoot != null) wm.removeView(panelRoot); } catch (Exception ignored) {}
         try { if (fab != null) wm.removeView(fab); } catch (Exception ignored) {}
@@ -178,6 +185,7 @@ public class PanelService extends Service {
             @Override public boolean onTouch(View v, android.view.MotionEvent e) {
                 switch (e.getActionMasked()) {
                     case android.view.MotionEvent.ACTION_DOWN:
+                        Log.i("fab touch down x=" + fabLp.x + " y=" + fabLp.y);
                         float cx = v.getWidth() / 2f;
                         float cy = v.getHeight() / 2f;
                         float rad = Math.min(cx, cy) + dp(2);
@@ -219,9 +227,11 @@ public class PanelService extends Service {
                     case android.view.MotionEvent.ACTION_UP:
                         ui.removeCallbacks(longPress);
                         if (dragging) {
+                            Log.i("fab drag end x=" + fabLp.x + " y=" + fabLp.y);
                             prefs().edit().putInt("fab_x", fabLp.x)
                                     .putInt("fab_y", fabLp.y).apply();
                         } else if (!longFired[0]) {
+                            Log.i("fab click");
                             v.performClick();
                         }
                         return true;
@@ -229,7 +239,11 @@ public class PanelService extends Service {
                 return false;
             }
         });
-        try { wm.addView(fab, fabLp); } catch (Exception e) { toast("浮窗被拒绝: " + e); }
+        Log.i("fab created at x=" + fabLp.x + " y=" + fabLp.y);
+        try { wm.addView(fab, fabLp); } catch (Exception e) {
+            Log.e("fab addView failed: " + e, e);
+            toast("浮窗被拒绝: " + e);
+        }
         // Keep the button on screen when the saved position was taken in another rotation.
         fab.post(() -> {
             try {
@@ -251,6 +265,7 @@ public class PanelService extends Service {
     }
 
     private void fabMenu() {
+        Log.i("fab long-press menu shown");
         LinearLayout box = newModalBox();
         TextView t = new TextView(this);
         t.setText("改号按钮");
@@ -264,19 +279,60 @@ public class PanelService extends Service {
             new Thread(() -> {
                 String p = SaveBackend.newestPath();
                 boolean ok = p != null && SaveBackend.restoreBackup(p);
-                Log.write(this, "restore backup " + p + " ok=" + ok);
+                Log.i("restore backup path=" + p + " ok=" + ok);
                 ui.post(() -> {
                     toast(ok ? "已恢复备份；重新读档后生效" : "没有找到备份");
                     if (ok) loadSave();
                 });
             }).start();
         }));
+        box.addView(btn("强退游戏（改完号再重进）", v -> { closeModal(); confirmForceStop(); }));
         box.addView(btn("退出面板", v -> { closeModal(); stopSelf(); }));
         box.addView(btn("取消", v -> closeModal()));
         showModal(box);
     }
 
+    private void updateDone() {
+        if (doneBtn == null) return;
+        doneBtn.setText("完成并强退游戏（已改 " + pending + " 处）");
+        doneBtn.setVisibility(pending > 0 ? View.VISIBLE : View.GONE);
+    }
+
+    /** The running game rewrites the save on exit, so ask before killing it. */
+    private void confirmForceStop() {
+        Log.i("confirm force-stop shown, pending=" + pending);
+        LinearLayout box = newModalBox();
+        TextView t = new TextView(this);
+        t.setText("改号已写入并校验（本次 " + pending + " 处）。" + NL + NL
+                + "确定现在强退游戏吗？" + NL
+                + "未保存的比赛进度会丢失，" + NL + "但号码修改会保留。");
+        t.setTextColor(Color.WHITE);
+        t.setTextSize(14);
+        t.setPadding(dp(4), 0, dp(4), dp(8));
+        box.addView(t);
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.addView(btn("强退游戏", v -> { closeModal(); forceStopGame(); }));
+        bar.addView(btn("取消", v -> closeModal()));
+        box.addView(bar);
+        showModal(box);
+    }
+
+    private void forceStopGame() {
+        Log.i("user action: force-stop game");
+        String out = RootUtil.shRead("am force-stop com.ea.game.fifa14_row && echo KILLED", 2).trim();
+        Log.i("force-stop result=" + out);
+        if (out.contains("KILLED")) {
+            pending = 0;
+            updateDone();
+            toast("已强退游戏；重新打开并读取生涯即可");
+        } else {
+            toast("强退失败: " + out);
+        }
+    }
+
     private void removeFab() {
+        Log.i("fab removed by user");
         hidePanel();
         if (fab != null) {
             try { wm.removeView(fab); } catch (Exception ignored) {}
@@ -286,6 +342,7 @@ public class PanelService extends Service {
     }
 
     private void showPanel() {
+        Log.i("panel open");
         if (panelRoot == null) buildPanel();
         open = true;
         panelRoot.setVisibility(View.VISIBLE);
@@ -294,6 +351,7 @@ public class PanelService extends Service {
     }
 
     private void hidePanel() {
+        Log.i("panel hide");
         closeModal();
         open = false;
         if (panelRoot != null) {
@@ -301,6 +359,17 @@ public class PanelService extends Service {
             panelRoot = null;
         }
         if (fab != null) fab.setAlpha(1f);
+    }
+
+    /** All text inputs share a dark background so white text stays readable. */
+    private EditText edit(boolean numeric) {
+        EditText e = new EditText(this);
+        e.setTextColor(Color.WHITE);
+        e.setHintTextColor(0xFF9E9E9E);
+        e.setBackgroundColor(0xFF333333);
+        e.setPadding(dp(8), dp(6), dp(8), dp(6));
+        if (numeric) e.setInputType(InputType.TYPE_CLASS_NUMBER);
+        return e;
     }
 
     private Button btn(String text, View.OnClickListener l) {
@@ -342,12 +411,10 @@ public class PanelService extends Service {
         statusView.setPadding(dp(4), dp(2), dp(4), dp(4));
         root.addView(statusView);
 
-        searchBox = new EditText(this);
+        searchBox = edit(false);
         searchBox.setHint("搜索球员（模糊，如 raya）");
         searchBox.setSingleLine(true);
         searchBox.setTextSize(12);
-        searchBox.setTextColor(Color.WHITE);
-        searchBox.setHintTextColor(0xFF9E9E9E);
         searchBox.setText(query);
         searchBox.addTextChangedListener(new android.text.TextWatcher() {
             public void beforeTextChanged(CharSequence c, int a, int b, int d) {}
@@ -365,6 +432,10 @@ public class PanelService extends Service {
         listView.setOrientation(LinearLayout.VERTICAL);
         sc.addView(listView);
         root.addView(sc, new LinearLayout.LayoutParams(dp(320), dp(430)));
+
+        doneBtn = btn("完成并强退游戏", v -> confirmForceStop());
+        doneBtn.setVisibility(pending > 0 ? View.VISIBLE : View.GONE);
+        root.addView(doneBtn);
 
         panelLp = overlayLp();
         panelLp.width = WindowManager.LayoutParams.WRAP_CONTENT;
@@ -384,9 +455,15 @@ public class PanelService extends Service {
         final int team = prefs().getInt(KEY_TEAM, -1);
         new Thread(() -> {
             String path = SaveBackend.newestPath();
-            if (path == null) { ui.post(() -> statusView.setText("找不到 SAVECAREER 存档")); return; }
+            if (path == null) {
+                Log.e("no SAVECAREER file in " + SaveBackend.DIR);
+                ui.post(() -> statusView.setText("找不到 SAVECAREER 存档"));
+                return;
+            }
+            Log.i("save load start path=" + path);
             byte[] data = SaveBackend.read(this, path);
             if (data == null) {
+                Log.e("save read failed path=" + path);
                 ui.post(() -> statusView.setText("读取失败（需要 root）"));
                 return;
             }
@@ -401,6 +478,10 @@ public class PanelService extends Service {
             if (useTeam > 0) prefs().edit().putInt(KEY_TEAM, useTeam).apply();
             SaveBackend.Block tb = SaveBackend.teamBlock(bs, useTeam);
             boolean okSum = SaveBackend.checksumOk(data);
+            Log.i("save loaded size=" + data.length + " md5=" + md5(data)
+                    + " headerTeam=" + header + " useTeam=" + useTeam
+                    + " blocks=" + bs.size() + " rows=" + (tb == null ? 0 : tb.rows)
+                    + " checksum=" + okSum);
             ui.post(() -> {
                 savePath = path;
                 saveData = data;
@@ -427,6 +508,7 @@ public class PanelService extends Service {
     }
 
     private void pickTeam() {
+        Log.i("team picker opened");
         PlayerIndex ix = PlayerIndex.get(this);
         if (ix == null) { toast("索引未加载"); return; }
         final int current = prefs().getInt(KEY_TEAM, 10);
@@ -445,11 +527,9 @@ public class PanelService extends Service {
         head.addView(btn("关闭", v -> closeModal()));
         box.addView(head);
 
-        EditText filter = new EditText(this);
+        EditText filter = edit(false);
         filter.setHint("筛选，例如 Manchester");
         filter.setSingleLine(true);
-        filter.setTextColor(Color.WHITE);
-        filter.setHintTextColor(0xFF9E9E9E);
         box.addView(filter);
 
         ScrollView sc = new ScrollView(this);
@@ -468,6 +548,9 @@ public class PanelService extends Service {
             for (PlayerIndex.Team t : all) {
                 if (!PlayerIndex.teamMatches(t.name, tokens)) continue;
                 Button b = btn(t.name + "  #" + t.id, v -> {
+                    Log.i("team selected id=" + t.id + " name=" + t.name);
+                    // The search box only ever holds text the user typed; picking a team
+                    // must not write (or wipe) anything into it.
                     prefs().edit().putInt(KEY_TEAM, t.id).apply();
                     closeModal();
                     toast("已选 " + t.name + " (id " + t.id + ")");
@@ -541,6 +624,18 @@ public class PanelService extends Service {
         }
     }
 
+    private static String md5(byte[] d) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+            byte[] h = md.digest(d);
+            StringBuilder b = new StringBuilder();
+            for (byte x : h) b.append(String.format("%02x", x));
+            return b.toString();
+        } catch (Exception e) {
+            return "?";
+        }
+    }
+
     /** Fuzzy search across every roster block; results show the club name. */
     private void renderSearch(PlayerIndex ix, String q) {
         String[] tokens = q.toLowerCase().split("[ ]+");
@@ -567,6 +662,7 @@ public class PanelService extends Service {
             }
             if (shown >= 300) break;
         }
+        Log.i("player search q=\"" + q + "\" results=" + shown);
         if (statusView != null) {
             statusView.setText(shown == 0 ? ("没有匹配 “" + q + "” 的球员")
                     : ("搜索 “" + q + "”：" + shown + " 人（全存档）"));
@@ -576,6 +672,10 @@ public class PanelService extends Service {
     private void askNumber(SaveBackend.Row row) {
         PlayerIndex ix0 = PlayerIndex.get(this);
         String nm0 = ix0 == null ? ("pid " + row.pid) : ix0.name(row.pid);
+        Log.i("number dialog: " + nm0 + " pid=" + row.pid + " current=#" + row.jersey()
+                + " offset=0x" + Integer.toHexString(row.offset));
+        // Never touch the search box here: it holds only what the user typed. A search
+        // started by the user stays after picking a player; without a search it stays empty.
 
         LinearLayout box = newModalBox();
         TextView title = new TextView(this);
@@ -585,11 +685,9 @@ public class PanelService extends Service {
         title.setPadding(dp(4), 0, 0, dp(6));
         box.addView(title);
 
-        EditText et = new EditText(this);
-        et.setInputType(InputType.TYPE_CLASS_NUMBER);
+        EditText et = edit(true);
         et.setText(String.valueOf(row.jersey()));
         et.selectAll();
-        et.setTextColor(Color.WHITE);
         et.setTextSize(22);
         box.addView(et);
 
@@ -633,8 +731,14 @@ public class PanelService extends Service {
         if (owner != null) SaveBackend.setJersey(data, owner.offset, old);
         if (statusView != null) statusView.setText("正在写入存档…");
 
+        Log.i("apply start: " + playerName + " pid=" + row.pid + " #" + old + " -> #" + want
+                + (owner != null ? " swapWith=" + ownerName + "/" + owner.pid : "")
+                + " path=" + savePath);
+        final long t0 = System.currentTimeMillis();
         new Thread(() -> {
             SaveBackend.WriteResult wr = SaveBackend.write(this, savePath, data);
+            Log.i("apply done in " + (System.currentTimeMillis() - t0) + "ms ok=" + wr.ok
+                    + (wr.ok ? "" : " err=" + wr.error));
             Log.write(this, "apply " + playerName + " #" + old + " -> #" + want
                     + (owner != null ? " (swap with " + ownerName + ")" : "")
                     + " ok=" + wr.ok + (wr.ok ? "" : " err=" + wr.error));
@@ -650,6 +754,11 @@ public class PanelService extends Service {
                         : ("#" + want + " 已写入存档");
                 toast(msg + "（已校验写入）");
                 loadSave();
+                pending++;
+                updateDone();
+                if (RootUtil.fifaPid() > 0 && statusView != null) {
+                    statusView.setText("已写入 " + pending + " 处；全部改完后点「完成并强退游戏」");
+                }
             });
         }).start();
     }

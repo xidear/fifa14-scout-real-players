@@ -72,6 +72,7 @@ public final class PlayerIndex {
         java.util.Collections.sort(teamList, (a, b) -> a.name.compareToIgnoreCase(b.name));
         sortedPids = pids;
         java.util.Arrays.sort(sortedPids);
+        Log.i("index loaded: players=" + pidName.size() + " teams=" + teamList.size());
     }
 
     public static synchronized PlayerIndex get(Context ctx) {

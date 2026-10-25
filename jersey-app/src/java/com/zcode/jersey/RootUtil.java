@@ -26,12 +26,25 @@ final class RootUtil {
 
     static String shRead(String cmd, int maxLines) {
         String out = shReadLocal(cmd, maxLines);
-        if (out != null && !out.isEmpty()) return out;
+        if (out != null && !out.isEmpty()) {
+            Log.i("su: " + brief(cmd) + " -> " + brief(out));
+            return out;
+        }
         if (RootBridge.alive()) {
             String b = RootBridge.exec(cmd);
-            if (b != null) return b;
+            if (b != null) {
+                Log.i("su(bridge): " + brief(cmd) + " -> " + brief(b));
+                return b;
+            }
         }
+        Log.w("su: " + brief(cmd) + " -> (empty)");
         return out == null ? "" : out;
+    }
+
+    private static String brief(String s) {
+        if (s == null) return "null";
+        String t = s.replace("\n", " | ").replace("\r", "");
+        return t.length() > 300 ? t.substring(0, 300) + "..." : t;
     }
 
     private static String shReadLocal(String cmd, int maxLines) {

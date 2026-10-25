@@ -11,24 +11,23 @@ SECTION_START = 924406512  # [CAREER] block inside the 1,386,236,976-byte origin
 SECTION_LEN = 40000
 
 # key -> new value (same printed length as the original, padded with spaces)
+# Only CPU-activity boosts are kept. "Seller willingness" params stay at vanilla values:
+#   IDEAL_NUM_PLAYERS 23, MAX_PLAYERS 30, STAR_INTEREST_THRESHOLD 70,
+#   TRANSFER_PLAYER_DIF_BUY_MULT 0.75
+# Raising them made every CPU club want a bigger squad, so they demanded huge premiums
+# when the user bid for a non-listed player (e.g. 24M for a 17M player = 50%).
 VALUES = {
     "PROB_BUYING_PLAYER": "95",
-    "PROB_BUY_FIRST_PLAYER": "95",
     "SIGNING_CHANCE": "95",
     "SMALL_TEAM_SIGNING_CHANCE": "99",
     "PROB_CPU_OFFER": "95",
-    "BUYING_PLAYER_RATING_DIF": "40",
     "RATING_DIFF_FOR_CPU_SCOUT": "40",
     "PROB_SELLING_RANDOM_PLAYER": "60",
-    "MAX_PLAYERS": "40",
-    "IDEAL_NUM_PLAYERS": "28",
-    "STAR_INTEREST_THRESHOLD": "55",
     "PROB_OF_OFFER_WITHDRAWL": "10",
     "CPU_BUY_PRICE_RANGE": "99",
     "CPU_RANDOM_BUY_PRICE_RANGE": "99",
     "CPU_GOOD_PLAYER_BUY_PRICE_RANGE": "300",
     "CPU_BAD_PLAYER_BUY_PRICE_RANGE": "99",
-    "TRANSFER_PLAYER_DIF_BUY_MULT": "1.00",
     "WAGE_OFFER_DIVIDER": "05",
 }
 # exact same-length line fragments (single-digit values that must grow)

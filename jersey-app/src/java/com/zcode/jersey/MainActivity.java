@@ -20,6 +20,8 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        Log.init(this);
+        Log.i("MainActivity.onCreate");
         setContentView(R.layout.activity_main);
         status = findViewById(R.id.status);
         start = findViewById(R.id.start);
@@ -27,6 +29,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.remove).setOnClickListener(v -> {
             startService(new Intent(this, PanelService.class).setAction(PanelService.ACTION_REMOVE));
             status.postDelayed(this::refreshStatus, 300);
+            Log.i("button: remove fab clicked");
             Toast.makeText(this, "已从屏幕移除按钮（通知栏仍可恢复）", Toast.LENGTH_SHORT).show();
         });
     }
@@ -39,6 +42,8 @@ public class MainActivity extends Activity {
 
     private void refreshStatus() {
         boolean root = RootUtil.hasRoot();
+        Log.i("refreshStatus root=" + root + " fifaPid=" + RootUtil.fifaPid()
+                + " panel=" + PanelService.isRunning());
         if (Build.VERSION.SDK_INT >= 26 && !Settings.canDrawOverlays(this)) {
             try {
                 startActivityForResult(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -50,11 +55,13 @@ public class MainActivity extends Activity {
         sb.append(root ? "root: 已授权\n" : "root: 未授权（请在 Magisk 里允许本应用）\n");
         sb.append(pid > 0 ? ("FIFA: 运行中 (pid " + pid + ")\n") : "FIFA: 未运行\n");
         sb.append(PanelService.isRunning() ? "面板: 已开启" : "面板: 未开启");
+        sb.append("\n日志: ").append(Log.path());
         status.setText(sb.toString());
         start.setText(PanelService.isRunning() ? "面板已开启（点此重新打开）" : "开启改号面板");
     }
 
     private void go() {
+        Log.i("button: start panel clicked");
         if (!RootUtil.hasRoot()) {
             Toast.makeText(this, "需要 root：Magisk → 超级用户 里给本应用授权（或插电脑运行 root_bridge.py）",
                     Toast.LENGTH_LONG).show();

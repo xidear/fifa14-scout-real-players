@@ -48,12 +48,16 @@ final class SaveBackend {
     }
 
     static byte[] read(Context ctx, String path) {
+        long t0 = System.currentTimeMillis();
         File cache = new File(ctx.getCacheDir(), "save_read.bin");
         if (cache.exists()) cache.delete();
         String cmd = "cp '" + path + "' '" + cache.getAbsolutePath() + "' && chmod 644 '"
                 + cache.getAbsolutePath() + "'";
         RootUtil.shRead(cmd, 2);
-        if (!cache.exists() || cache.length() == 0) return null;
+        if (!cache.exists() || cache.length() == 0) {
+            Log.e("read: root cp failed for " + path + " cmd=" + cmd);
+            return null;
+        }
         try {
             InputStream in = new FileInputStream(cache);
             ByteArrayOutputStream bo = new ByteArrayOutputStream((int) cache.length());
@@ -61,8 +65,11 @@ final class SaveBackend {
             int n;
             while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
             in.close();
-            return bo.toByteArray();
+            byte[] out = bo.toByteArray();
+            Log.i("read: " + out.length + " bytes in " + (System.currentTimeMillis() - t0) + "ms");
+            return out;
         } catch (Exception e) {
+            Log.e("read: cache read failed: " + e, e);
             return null;
         }
     }
@@ -79,7 +86,11 @@ final class SaveBackend {
     }
 
     static WriteResult write(Context ctx, String path, byte[] data) {
+        long t0 = System.currentTimeMillis();
         fixChecksum(data);
+        int crc = (data[data.length - 4] & 0xFF) | ((data[data.length - 3] & 0xFF) << 8)
+                | ((data[data.length - 2] & 0xFF) << 16) | ((data[data.length - 1] & 0xFF) << 24);
+        Log.i("write: start path=" + path + " bytes=" + data.length + " crc=0x" + Integer.toHexString(crc));
         File f = new File(ctx.getCacheDir(), "save_write.bin");
         try (FileOutputStream out = new FileOutputStream(f)) {
             out.write(data);
@@ -88,7 +99,11 @@ final class SaveBackend {
         }
         String own = RootUtil.shRead("stat -c '%u %g %a' '" + path + "'", 2).trim();
         String[] og = own.split("\\s+");
-        if (og.length != 3) return WriteResult.fail("读不到原存档属主（root 失败？）");
+        Log.i("write: stat=" + own);
+        if (og.length != 3) {
+            Log.e("write: stat failed, out=" + own);
+            return WriteResult.fail("读不到原存档属主（root 失败？）");
+        }
 
         String tmp = path + ".app_tmp";
         String bak = path + ".bak_jersey";
@@ -101,12 +116,20 @@ final class SaveBackend {
                 + " && mv -f '" + tmp + "' '" + path + "'"
                 + " && echo APPLIED";
         String out = RootUtil.shRead(cmd, 5).trim();
-        if (!out.contains("APPLIED")) return WriteResult.fail("root 命令未成功: " + out);
+        Log.i("write: install out=" + out);
+        if (!out.contains("APPLIED")) {
+            Log.e("write: install failed, cmd=" + cmd + " out=" + out);
+            return WriteResult.fail("root 命令未成功: " + out);
+        }
 
         // Verify: read the file back and compare every byte with what we meant to write.
         byte[] back = read(ctx, path);
-        if (back == null) return WriteResult.fail("写入后回读失败");
+        if (back == null) {
+            Log.e("write: read-back failed");
+            return WriteResult.fail("写入后回读失败");
+        }
         if (back.length != data.length) {
+            Log.e("write: read-back length " + back.length + " != " + data.length);
             return WriteResult.fail("回读长度不符 " + back.length + " != " + data.length);
         }
         int firstDiff = -1;
@@ -114,8 +137,12 @@ final class SaveBackend {
             if (back[i] != data[i]) { firstDiff = i; break; }
         }
         if (firstDiff >= 0) {
+            Log.e("write: read-back mismatch at 0x" + Integer.toHexString(firstDiff)
+                    + " expected=" + String.format("%02x", data[firstDiff])
+                    + " actual=" + String.format("%02x", back[firstDiff]));
             return WriteResult.fail("回读内容不符，首个差异 @" + Integer.toHexString(firstDiff));
         }
+        Log.i("write: verified OK in " + (System.currentTimeMillis() - t0) + "ms");
         WriteResult r = new WriteResult();
         r.ok = true;
         return r;
@@ -123,6 +150,7 @@ final class SaveBackend {
 
     /** Restores the untouched copy saved by write(); false when there is none. */
     static boolean restoreBackup(String path) {
+        Log.i("restore: start path=" + path);
         String bak = path + ".bak_jersey";
         String own = RootUtil.shRead("stat -c '%u %g %a' '" + path + "'", 2).trim();
         String[] og = own.split("\\s+");
@@ -130,7 +158,9 @@ final class SaveBackend {
         String cmd = "[ -f '" + bak + "' ] && cp '" + bak + "' '" + path + "'"
                 + " && chown " + og[0] + ":" + og[1] + " '" + path + "'"
                 + " && chmod " + og[2] + " '" + path + "' && echo OK";
-        return RootUtil.shRead(cmd, 2).trim().equals("OK");
+        String out = RootUtil.shRead(cmd, 2).trim();
+        Log.i("restore: out=" + out);
+        return out.equals("OK");
     }
 
     static boolean hasBackup(String path) {
