@@ -18,6 +18,7 @@ import android.os.Looper;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
@@ -61,6 +62,7 @@ public class PanelService extends Service {
 
     private TextView statusView;
     private LinearLayout listView;
+    private ScrollView listScroll;
     private List<SaveBackend.Block> blocks = new ArrayList<>();
     private SaveBackend.Block teamBlock;
     private byte[] saveData;
@@ -296,6 +298,8 @@ public class PanelService extends Service {
         if (doneBtn == null) return;
         doneBtn.setText("完成并强退游戏（已改 " + pending + " 处）");
         doneBtn.setVisibility(pending > 0 ? View.VISIBLE : View.GONE);
+        // the button appearing/disappearing changes the panel height -> re-fit
+        if (panelRoot != null) panelRoot.post(this::fitPanel);
     }
 
     /** The running game rewrites the save on exit, so ask before killing it. */
@@ -432,6 +436,7 @@ public class PanelService extends Service {
         listView.setOrientation(LinearLayout.VERTICAL);
         sc.addView(listView);
         root.addView(sc, new LinearLayout.LayoutParams(dp(320), dp(430)));
+        listScroll = sc;
 
         doneBtn = btn("完成并强退游戏", v -> confirmForceStop());
         doneBtn.setVisibility(pending > 0 ? View.VISIBLE : View.GONE);
@@ -445,6 +450,44 @@ public class PanelService extends Service {
         panelRoot = root;
         try { wm.addView(panelRoot, panelLp); }
         catch (Exception e) { toast("面板显示失败: " + e); panelRoot = null; }
+        if (panelRoot != null) {
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            Log.i("panel build: metrics=" + dm.widthPixels + "x" + dm.heightPixels + " density=" + dm.density
+                    + " dp1=" + dp(1) + " dp430=" + dp(430) + " y=" + panelLp.y + " x=" + panelLp.x);
+            // fit only after a real layout pass - getHeight() is meaningless before it
+            root.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                Log.i("panel layout: " + v.getWidth() + "x" + v.getHeight()
+                        + " list=" + (listScroll == null ? -1 : listScroll.getHeight()));
+                fitPanel();
+            });
+        }
+    }
+
+    /**
+     * Keep the whole panel — including the bottom "done" button — inside the screen.
+     * The old fixed 430dp list made the panel taller than a 1200px-tall landscape screen,
+     * so the force-stop button was clipped off the bottom edge.
+     */
+    private void fitPanel() {
+        if (panelRoot == null || listScroll == null || panelLp == null) return;
+        ViewGroup.LayoutParams sp = listScroll.getLayoutParams();
+        if (sp == null || !(sp instanceof LinearLayout.LayoutParams)) return;
+        android.graphics.Point scr = new android.graphics.Point();
+        wm.getDefaultDisplay().getRealSize(scr);
+        int avail = scr.y - panelLp.y - dp(12);
+        int chrome = panelRoot.getHeight() - listScroll.getHeight();
+        int target = Math.max(dp(140), Math.min(dp(430), avail - chrome));
+        Log.i("panel fit: rot=" + wm.getDefaultDisplay().getRotation() + " real=" + scr.x + "x" + scr.y
+                + " density=" + getResources().getDisplayMetrics().density
+                + " y=" + panelLp.y + " panelH=" + panelRoot.getHeight()
+                + " listH=" + listScroll.getHeight() + " chrome=" + chrome
+                + " avail=" + avail + " -> list=" + target);
+        if (target != sp.height) {
+            sp.height = target;
+            listScroll.setLayoutParams(sp);
+            Log.i("panel fit: screen=" + scr.x + "x" + scr.y + " chrome=" + chrome
+                    + " list=" + target);
+        }
     }
 
     // ------------------------------------------------------------ data
@@ -696,10 +739,13 @@ public class PanelService extends Service {
         bar.addView(btn("取消", v -> closeModal()));
         bar.addView(btn("确定", v -> {
             int want;
-            try { want = Integer.parseInt(et.getText().toString().trim()); }
-            catch (Exception e) { toast("号码无效"); return; }
-            if (want < 1 || want > 99) { toast("号码 1-99"); return; }
-            if (want == row.jersey()) { closeModal(); return; }
+            String typed = et.getText().toString().trim();
+            try { want = Integer.parseInt(typed); }
+            catch (Exception e) { Log.i("number confirm: invalid text='" + typed + "'"); toast("号码无效"); return; }
+            if (want < 1 || want > 99) { Log.i("number confirm: out of range " + want); toast("号码 1-99"); return; }
+            Log.i("number confirm: " + nm0 + " typed='" + typed + "' want=" + want
+                    + " current=" + row.jersey());
+            if (want == row.jersey()) { toast("号码没变，仍是 #" + want); closeModal(); return; }
             closeModal();
             apply(row, want);
         }));

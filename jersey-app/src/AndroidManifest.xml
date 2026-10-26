@@ -3,6 +3,19 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.zcode.jersey">
 
+    <!-- No uses-sdk made the app inherit targetSdk=1, which puts it in legacy
+         screen-compatibility mode: a 512x320 canvas at density 1.0 upscaled ~3.75x.
+         Every dp() was then 3.75x smaller than the real screen, so the panel was
+         wider than the canvas and its bottom (the done button) fell off the screen. -->
+    <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="28" />
+
+    <supports-screens
+        android:smallScreens="true"
+        android:normalScreens="true"
+        android:largeScreens="true"
+        android:xlargeScreens="true"
+        android:anyDensity="true" />
+
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
