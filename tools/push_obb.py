@@ -62,7 +62,10 @@ def main():
     if not sh("ls " + target).startswith(target):
         sys.exit("device OBB not found: " + target)
 
-    uid_gid_mode = sh('stat -c "%%u %%g %%a" ' + target).split()
+    # toybox on the Mi Pad 4 segfaults on `stat -c "%u %g %a"`; split the calls
+    uid_gid = sh("stat -c '%u %g' " + target).split()
+    mode = sh("stat -c '%a' " + target).split()
+    uid_gid_mode = uid_gid + mode
     if len(uid_gid_mode) != 3:
         sys.exit("cannot stat device OBB: " + " ".join(uid_gid_mode))
     uid, gid, mode = uid_gid_mode
