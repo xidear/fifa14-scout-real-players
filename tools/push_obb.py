@@ -21,7 +21,7 @@ import sys
 
 PKG = "com.ea.game.fifa14_row"
 OBB_NAME = "main.136.com.ea.game.fifa14_row.obb"
-EXPECTED_MD5 = "2eea673ac58cdb1fb35c60ecba74dfa3"
+EXPECTED_MD5 = "ec2cd8b36448188c575f2a98a198fdda"
 EXPECTED_SIZE = 1386236976
 
 
